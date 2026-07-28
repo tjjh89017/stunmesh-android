@@ -34,7 +34,9 @@ fun TunnelListScreen(
     onToggle: (TunnelConfig, Boolean) -> Unit,
     onEdit: (TunnelConfig) -> Unit,
     onDelete: (TunnelConfig) -> Unit,
+    onExport: (TunnelConfig) -> Unit,
     onAdd: () -> Unit,
+    onImport: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -61,11 +63,15 @@ fun TunnelListScreen(
                     onToggle = { on -> onToggle(tunnel, on) },
                     onEdit = { onEdit(tunnel) },
                     onDelete = { onDelete(tunnel) },
+                    onExport = { onExport(tunnel) },
                 )
             }
         }
         OutlinedButton(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
             Text("Add tunnel")
+        }
+        OutlinedButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) {
+            Text("Import from YAML")
         }
     }
 }
@@ -78,6 +84,7 @@ private fun TunnelRow(
     onToggle: (Boolean) -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onExport: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -108,6 +115,7 @@ private fun TunnelRow(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(onClick = onEdit) { Text("Edit") }
+                TextButton(onClick = onExport) { Text("Export") }
                 TextButton(onClick = onDelete, enabled = !running) { Text("Delete") }
             }
         }

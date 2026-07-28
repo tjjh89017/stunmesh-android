@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import dev.stunmesh.android.config.ConfigRepository
 import dev.stunmesh.android.config.TunnelConfig
+import dev.stunmesh.android.config.TunnelYaml
 import dev.stunmesh.android.tunnel.TunnelManager
 import dev.stunmesh.android.ui.StatusScreen
 import dev.stunmesh.android.ui.TunnelEditorScreen
@@ -68,6 +69,45 @@ private fun MainScreen() {
             tab = Tab.Status
         } else {
             TunnelManager.appendLog("[warn] VPN consent denied")
+        }
+    }
+
+    // The tunnel whose YAML the create-document picker will receive.
+    var exporting by remember { mutableStateOf<TunnelConfig?>(null) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/yaml")
+    ) { uri ->
+        val tunnel = exporting
+        exporting = null
+        if (uri == null || tunnel == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.openOutputStream(uri)?.use {
+                it.write(TunnelYaml.encode(tunnel).encodeToByteArray())
+            } ?: error("could not open $uri for writing")
+        }.onSuccess {
+            TunnelManager.appendLog("[info] exported ${tunnel.name}")
+        }.onFailure {
+            TunnelManager.appendLog("[error] export failed: ${it.message}")
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            val text = context.contentResolver.openInputStream(uri)?.use {
+                it.readBytes().decodeToString()
+            } ?: error("could not open $uri for reading")
+            val tunnel = TunnelYaml.decode(text)
+            store = store.upsert(tunnel)
+            repository.save(store)
+            tunnel.name
+        }.onSuccess {
+            TunnelManager.appendLog("[info] imported $it")
+        }.onFailure {
+            TunnelManager.appendLog("[error] import failed: ${it.message}")
         }
     }
 
@@ -136,7 +176,12 @@ private fun MainScreen() {
                     store = store.remove(tunnel.id)
                     repository.save(store)
                 },
+                onExport = { tunnel ->
+                    exporting = tunnel
+                    exportLauncher.launch("${tunnel.name}.yaml")
+                },
                 onAdd = { editing = TunnelConfig() },
+                onImport = { importLauncher.launch(arrayOf("*/*")) },
                 modifier = Modifier.padding(innerPadding),
             )
         }
