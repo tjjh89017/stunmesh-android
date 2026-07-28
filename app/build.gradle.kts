@@ -6,19 +6,22 @@ plugins {
 // How each build type gets the Go core (stunmesh-go's mobile package, built
 // with gomobile):
 //
-//   debug   - libs/stunmesh.aar if you dropped one there, so the app can be
+//   debug   - any .aar dropped in libs/, so the app can be
 //             iterated against an unreleased core; otherwise the pinned release
 //   release - always the pinned release, never the local file: a shipped build
 //             must be reproducible from the sources alone
 //
 // Without either, the build falls back to the stub backend, which moves no
 // packets. Set stunmeshCoreVersion in gradle.properties to a stunmesh-go tag
-// whose release carries stunmesh.aar.
-val localGoCore = file("libs/stunmesh.aar")
+// whose release carries the AAR.
+// Any AAR dropped in libs/, since the artifact carries its version in the name
+// (stunmesh-android-<version>.aar) and pinning one spelling would silently
+// ignore the file a developer just downloaded.
+val localGoCore = fileTree("libs") { include("*.aar") }.files.firstOrNull()
 val goCoreVersion = providers.gradleProperty("stunmeshCoreVersion")
     .orNull
     ?.takeIf { it.isNotBlank() }
-val debugHasGoCore = localGoCore.exists() || goCoreVersion != null
+val debugHasGoCore = (localGoCore != null) || goCoreVersion != null
 val releaseHasGoCore = goCoreVersion != null
 val GO_BACKEND_SRC = "src/gobackend/kotlin"
 
@@ -102,8 +105,8 @@ android {
 }
 
 dependencies {
-    if (localGoCore.exists()) {
-        debugImplementation(files(localGoCore))
+    if (localGoCore != null) {
+        debugImplementation(files(localGoCore!!))
     } else if (goCoreVersion != null) {
         debugImplementation("dev.stunmesh:stunmesh-android:$goCoreVersion@aar")
     }
