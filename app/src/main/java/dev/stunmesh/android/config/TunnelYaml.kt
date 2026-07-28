@@ -5,51 +5,68 @@ import org.yaml.snakeyaml.Yaml
 
 /**
  * YAML form of a tunnel, for backing a config up, editing it on a desktop, or
- * moving it between devices. Keys follow the stunmesh-go config vocabulary
- * (`plugins` entries with type/name, `stun.addresses`, peer `protocol`), with
- * the WireGuard interface fields Android needs since the app owns the device
- * rather than attaching to an existing one.
+ * moving it between devices.
+ *
+ * The document carries a `schema` field (absent means 1) and splits into two
+ * top-level sections joined per peer by `public_key`:
+ *
+ *  - `wireguard`: the plain WireGuard device — wg-quick vocabulary, nothing
+ *    STUNMESH-specific. Strip the rest of the file and this section still
+ *    describes a working WG config.
+ *  - `stunmesh`: the overlay, mirroring the desktop stunmesh-go config.yaml
+ *    vocabulary (`plugins` entries with type/name, `stun.addresses`, peer
+ *    `plugin`/`protocol`).
  *
  * An exported file contains the interface private key and any plugin API
  * token in plain text: treat it as a secret.
  */
 object TunnelYaml {
 
+    const val SCHEMA = 1
+
     fun encode(tunnel: TunnelConfig): String {
         val root = linkedMapOf<String, Any?>(
+            "schema" to SCHEMA,
             "name" to tunnel.name,
-            "interface" to linkedMapOf(
+            "wireguard" to linkedMapOf(
                 "private_key" to tunnel.iface.privateKey,
                 "addresses" to tunnel.iface.addresses,
                 "dns_servers" to tunnel.iface.dnsServers,
                 "listen_port" to tunnel.iface.listenPort,
                 "mtu" to tunnel.iface.mtu,
-                "protocol" to tunnel.iface.protocol,
+                "peers" to tunnel.peers.map { peer ->
+                    linkedMapOf(
+                        "public_key" to peer.publicKey,
+                        "preshared_key" to peer.presharedKey,
+                        "allowed_ips" to peer.allowedIps,
+                        "endpoint" to peer.endpoint,
+                        "persistent_keepalive" to peer.persistentKeepalive,
+                    )
+                },
             ),
-            "peers" to tunnel.peers.map { peer ->
-                linkedMapOf(
-                    "name" to peer.name,
-                    "description" to peer.description,
-                    "public_key" to peer.publicKey,
-                    "preshared_key" to peer.presharedKey,
-                    "allowed_ips" to peer.allowedIps,
-                    "endpoint" to peer.endpoint,
-                    "plugin" to peer.plugin,
-                    "protocol" to peer.protocol,
-                    "persistent_keepalive" to peer.persistentKeepalive,
-                )
-            },
-            "plugins" to tunnel.plugins.map { plugin ->
-                linkedMapOf(
-                    "instance" to plugin.instance,
-                    "type" to plugin.type,
-                    "name" to plugin.name,
-                    "config" to LinkedHashMap(plugin.config),
-                )
-            },
-            "stun" to linkedMapOf("addresses" to tunnel.stunServers),
-            "refresh_interval_seconds" to tunnel.refreshIntervalSeconds,
-            "log" to linkedMapOf("level" to tunnel.logLevel),
+            "stunmesh" to linkedMapOf(
+                "protocol" to tunnel.iface.protocol,
+                "stun" to linkedMapOf("addresses" to tunnel.stunServers),
+                "plugins" to tunnel.plugins.map { plugin ->
+                    linkedMapOf(
+                        "instance" to plugin.instance,
+                        "type" to plugin.type,
+                        "name" to plugin.name,
+                        "config" to LinkedHashMap(plugin.config),
+                    )
+                },
+                "refresh_interval_seconds" to tunnel.refreshIntervalSeconds,
+                "log" to linkedMapOf("level" to tunnel.logLevel),
+                "peers" to tunnel.peers.map { peer ->
+                    linkedMapOf(
+                        "public_key" to peer.publicKey,
+                        "name" to peer.name,
+                        "description" to peer.description,
+                        "plugin" to peer.plugin,
+                        "protocol" to peer.protocol,
+                    )
+                },
+            ),
         )
         return yaml().dump(root)
     }
@@ -64,48 +81,64 @@ object TunnelYaml {
             .getOrElse { throw IllegalArgumentException("not valid YAML: ${it.message}") }
         require(root is Map<*, *>) { "expected a YAML mapping at the top level" }
 
-        val iface = root.map("interface")
-        val privateKey = iface.string("private_key")
-        require(privateKey.isNotEmpty()) { "interface.private_key is required" }
+        return when (val version = root.int("schema", 1)) {
+            1 -> decodeV1(root)
+            else -> throw IllegalArgumentException(
+                "config schema $version is newer than this app understands (up to $SCHEMA)"
+            )
+        }
+    }
+
+    private fun decodeV1(root: Map<*, *>): TunnelConfig {
+        val wg = root.map("wireguard")
+        val privateKey = wg.string("private_key")
+        require(privateKey.isNotEmpty()) { "wireguard.private_key is required" }
+        val sm = root.map("stunmesh")
+
+        // The stunmesh section is an overlay: entries attach to a WireGuard
+        // peer by public key, entries pointing at no WG peer are dropped.
+        val overlays = sm.mapList("peers").associateBy { it.string("public_key") }
 
         return TunnelConfig(
             name = root.string("name").ifEmpty { "imported" },
             iface = InterfaceConfig(
                 privateKey = privateKey,
-                addresses = iface.stringList("addresses"),
-                dnsServers = iface.stringList("dns_servers"),
-                listenPort = iface.int("listen_port", 0),
-                mtu = iface.int("mtu", 1420),
-                protocol = iface.string("protocol").ifEmpty { "ipv4" },
+                addresses = wg.stringList("addresses"),
+                dnsServers = wg.stringList("dns_servers"),
+                listenPort = wg.int("listen_port", 0),
+                mtu = wg.int("mtu", 1420),
+                protocol = sm.string("protocol").ifEmpty { "ipv4" },
             ),
-            peers = root.mapList("peers").map { peer ->
+            peers = wg.mapList("peers").map { peer ->
+                val publicKey = peer.string("public_key")
+                val overlay = overlays[publicKey] ?: emptyMap<Any, Any>()
                 PeerConfig(
-                    name = peer.string("name"),
-                    description = peer.string("description"),
-                    publicKey = peer.string("public_key"),
+                    name = overlay.string("name"),
+                    description = overlay.string("description"),
+                    publicKey = publicKey,
                     presharedKey = peer.string("preshared_key"),
                     allowedIps = peer.stringList("allowed_ips"),
                     endpoint = peer.string("endpoint"),
-                    plugin = peer.string("plugin"),
-                    protocol = peer.string("protocol").ifEmpty { "ipv4" },
+                    plugin = overlay.string("plugin"),
+                    protocol = overlay.string("protocol").ifEmpty { "ipv4" },
                     persistentKeepalive = peer.int("persistent_keepalive", 25),
                 )
             },
-            plugins = root.mapList("plugins").map { plugin ->
-                PluginDefinition(
-                    instance = plugin.string("instance").ifEmpty { "cloudflare_builtin" },
-                    type = plugin.string("type").ifEmpty { "builtin" },
-                    name = plugin.string("name").ifEmpty { "cloudflare" },
-                    config = plugin.map("config")
-                        .entries
-                        .associate { (k, v) -> k.toString() to scalar(v) },
-                )
-            },
-            stunServers = root.map("stun").stringList("addresses"),
-            refreshIntervalSeconds = root.int("refresh_interval_seconds", 600),
-            logLevel = root.map("log").string("level").ifEmpty { "info" },
+            plugins = sm.mapList("plugins").map { decodePlugin(it) },
+            stunServers = sm.map("stun").stringList("addresses"),
+            refreshIntervalSeconds = sm.int("refresh_interval_seconds", 600),
+            logLevel = sm.map("log").string("level").ifEmpty { "info" },
         )
     }
+
+    private fun decodePlugin(plugin: Map<*, *>): PluginDefinition = PluginDefinition(
+        instance = plugin.string("instance").ifEmpty { "cloudflare_builtin" },
+        type = plugin.string("type").ifEmpty { "builtin" },
+        name = plugin.string("name").ifEmpty { "cloudflare" },
+        config = plugin.map("config")
+            .entries
+            .associate { (k, v) -> k.toString() to scalar(v) },
+    )
 
     private fun yaml(): Yaml {
         // Block style, but without pretty flow: it spreads an empty list over
@@ -118,24 +151,24 @@ object TunnelYaml {
     }
 }
 
-private fun Map<*, *>.map(key: String): Map<*, *> = this[key] as? Map<*, *> ?: emptyMap<Any, Any>()
+internal fun Map<*, *>.map(key: String): Map<*, *> = this[key] as? Map<*, *> ?: emptyMap<Any, Any>()
 
-private fun Map<*, *>.mapList(key: String): List<Map<*, *>> =
+internal fun Map<*, *>.mapList(key: String): List<Map<*, *>> =
     (this[key] as? List<*>).orEmpty().filterIsInstance<Map<*, *>>()
 
-private fun Map<*, *>.string(key: String): String = scalar(this[key])
+internal fun Map<*, *>.string(key: String): String = scalar(this[key])
 
-private fun Map<*, *>.stringList(key: String): List<String> =
+internal fun Map<*, *>.stringList(key: String): List<String> =
     (this[key] as? List<*>).orEmpty().map { scalar(it) }.filter { it.isNotEmpty() }
 
-private fun Map<*, *>.int(key: String, fallback: Int): Int = when (val v = this[key]) {
+internal fun Map<*, *>.int(key: String, fallback: Int): Int = when (val v = this[key]) {
     is Number -> v.toInt()
     is String -> v.trim().toIntOrNull() ?: fallback
     else -> fallback
 }
 
 /** YAML scalars arrive as Int/Boolean/String; config fields are all text. */
-private fun scalar(value: Any?): String = when (value) {
+internal fun scalar(value: Any?): String = when (value) {
     null -> ""
     is String -> value
     else -> value.toString()

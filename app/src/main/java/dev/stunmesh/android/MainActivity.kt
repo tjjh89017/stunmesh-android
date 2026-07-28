@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import dev.stunmesh.android.config.ConfigRepository
 import dev.stunmesh.android.config.TunnelConfig
 import dev.stunmesh.android.config.TunnelYaml
+import dev.stunmesh.android.config.WgQuickConf
 import dev.stunmesh.android.tunnel.TunnelManager
 import dev.stunmesh.android.ui.AboutScreen
 import dev.stunmesh.android.ui.StatusScreen
@@ -101,7 +102,14 @@ private fun MainScreen() {
             val text = context.contentResolver.openInputStream(uri)?.use {
                 it.readBytes().decodeToString()
             } ?: error("could not open $uri for reading")
-            val tunnel = TunnelYaml.decode(text)
+            // Both the app's own YAML and plain wg-quick .conf files import;
+            // a .conf has no YAML mapping shape, so sniff for its section
+            // header rather than trying decoders in sequence.
+            val tunnel = if (WgQuickConf.looksLikeConf(text)) {
+                WgQuickConf.decode(text, displayName(context, uri))
+            } else {
+                TunnelYaml.decode(text)
+            }
             store = store.upsert(tunnel)
             repository.save(store)
             tunnel.name
@@ -195,4 +203,12 @@ private fun MainScreen() {
             )
         }
     }
+}
+
+/** Tunnel name for an imported .conf: the picked file's name, extension off. */
+private fun displayName(context: android.content.Context, uri: android.net.Uri): String {
+    val name = context.contentResolver
+        .query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+        ?.use { if (it.moveToFirst()) it.getString(0) else null }
+    return name?.substringBeforeLast('.')?.ifEmpty { null } ?: "imported"
 }
