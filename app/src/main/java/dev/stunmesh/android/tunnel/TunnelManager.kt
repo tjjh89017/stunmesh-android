@@ -20,8 +20,15 @@ import kotlinx.coroutines.flow.update
  */
 object TunnelManager {
 
-    /** Swap for the AAR-backed implementation when stunmesh-go ships `mobile/`. */
-    val backend: StunmeshBackend = StubBackend()
+    /**
+     * The Go-core backend when the AAR is bundled (GoBackend only exists in
+     * builds that include app/libs/stunmesh.aar), otherwise the stub.
+     */
+    val backend: StunmeshBackend = runCatching {
+        Class.forName("dev.stunmesh.android.backend.GoBackend")
+            .getDeclaredConstructor()
+            .newInstance() as StunmeshBackend
+    }.getOrElse { StubBackend() }
 
     private val _state = MutableStateFlow(BackendState.DOWN)
     val state: StateFlow<BackendState> = _state.asStateFlow()

@@ -4,10 +4,12 @@ Android client for [STUNMESH](https://github.com/tjjh89017/stunmesh-go) —
 peer-to-peer WireGuard connections through Full-Cone NAT using STUN discovery
 and encrypted peer-endpoint exchange, with no root required.
 
-> **Status: early development.** The app currently runs against a stub data
-> plane. The real Go core (embedded wireguard-go with a custom STUN-demuxing
-> `conn.Bind`, built with gomobile from stunmesh-go's `mobile/` package) is
-> under development and not wired in yet. Nothing moves packets today.
+> **Status: early development.** The Go core (embedded wireguard-go with a
+> custom STUN-demuxing `conn.Bind`, built with gomobile from stunmesh-go's
+> `mobile/` package) is bundled when `app/libs/stunmesh.aar` is present —
+> download it from the stunmesh-go Mobile workflow artifacts. Without the
+> AAR the app builds against a stub data plane that moves no packets.
+> On-device validation is still in progress.
 
 ## How it works
 

@@ -3,6 +3,11 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// The Go core AAR (built by stunmesh-go's Mobile workflow) is not committed.
+// When it is present the real backend compiles in; otherwise the app builds
+// with the stub backend only.
+val stunmeshAar = file("libs/stunmesh.aar")
+
 android {
     namespace = "dev.stunmesh.android"
     compileSdk {
@@ -35,9 +40,19 @@ android {
     buildFeatures {
         compose = true
     }
+    sourceSets {
+        getByName("main") {
+            if (stunmeshAar.exists()) {
+                java.srcDir("src/gobackend/java")
+            }
+        }
+    }
 }
 
 dependencies {
+    if (stunmeshAar.exists()) {
+        implementation(files(stunmeshAar))
+    }
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
