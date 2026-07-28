@@ -32,6 +32,12 @@ interface StunmeshBackend {
 
     /** True while the node is running. */
     val isRunning: Boolean
+
+    /**
+     * The STUNMESH core build this is linked against, for an about screen or
+     * a bug report. The stub reports that no core is bundled.
+     */
+    val coreVersion: String
 }
 
 /** Supplies the detached tun fd from `VpnService.Builder.establish()`. */

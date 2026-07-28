@@ -17,6 +17,8 @@ class StubBackend : StunmeshBackend {
     override var isRunning: Boolean = false
         private set
 
+    override val coreVersion: String = "not bundled"
+
     private var listener: EventListener? = null
 
     override fun start(

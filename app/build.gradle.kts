@@ -28,6 +28,34 @@ base {
     archivesName = "stunmesh-android"
 }
 
+// Version, in precedence order: an explicit -PversionName / VERSION_NAME from
+// whatever drives the build, then git, then a placeholder. The override lets a
+// release pipeline pin the version without the build script depending on git
+// at all; the git fallback keeps local builds meaningful.
+//
+// Reading git needs the full history: git describe wants the tags and
+// rev-list --count wants the commits, so a shallow CI checkout silently
+// produces "dev" and 1 unless it overrides or fetches with depth 0.
+fun git(vararg args: String): String? = runCatching {
+    providers.exec {
+        commandLine("git", *args)
+        isIgnoreExitValue = true
+    }.standardOutput.asText.get().trim().ifEmpty { null }
+}.getOrNull()
+
+fun override(property: String, environment: String): String? =
+    providers.gradleProperty(property).orNull?.takeIf { it.isNotBlank() }
+        ?: providers.environmentVariable(environment).orNull?.takeIf { it.isNotBlank() }
+
+val appVersionName = override("versionName", "VERSION_NAME")
+    ?: git("describe", "--tags", "--always", "--dirty")
+    ?: "dev"
+
+val appVersionCode = (override("versionCode", "VERSION_CODE")
+    ?: git("rev-list", "--count", "HEAD"))
+    ?.toIntOrNull()
+    ?: 1
+
 android {
     namespace = "dev.stunmesh.android"
     compileSdk {
@@ -40,8 +68,8 @@ android {
         applicationId = "dev.stunmesh.android"
         minSdk = 28
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -59,6 +87,8 @@ android {
     }
     buildFeatures {
         compose = true
+        // The about screen reads the version and build type from BuildConfig.
+        buildConfig = true
     }
     sourceSets {
         // GoBackend only compiles where the AAR it binds against is present.

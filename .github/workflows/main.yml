@@ -18,6 +18,18 @@ jobs:
           java-version: 21
           cache: gradle
 
+      # Version from the workflow context rather than git, so the checkout can
+      # stay shallow: git describe would need the tags and rev-list --count the
+      # whole history. run_number is monotonic, which versionCode must be.
+      - name: Version
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "VERSION_NAME=${{ github.ref_name }}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION_NAME=0.0.0-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          fi
+          echo "VERSION_CODE=${{ github.run_number }}" >> "$GITHUB_ENV"
+
       - name: Unit tests
         run: ./gradlew testDebugUnitTest --console=plain
 

@@ -18,6 +18,9 @@ class GoBackend : StunmeshBackend {
     override val isRunning: Boolean
         get() = node?.isRunning ?: false
 
+    override val coreVersion: String
+        get() = Mobile.version()
+
     override fun start(
         configJson: String,
         tunProvider: TunProvider,

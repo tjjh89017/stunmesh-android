@@ -26,6 +26,7 @@ import dev.stunmesh.android.config.ConfigRepository
 import dev.stunmesh.android.config.TunnelConfig
 import dev.stunmesh.android.config.TunnelYaml
 import dev.stunmesh.android.tunnel.TunnelManager
+import dev.stunmesh.android.ui.AboutScreen
 import dev.stunmesh.android.ui.StatusScreen
 import dev.stunmesh.android.ui.TunnelEditorScreen
 import dev.stunmesh.android.ui.TunnelListScreen
@@ -43,7 +44,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Tab { Status, Tunnels }
+private enum class Tab { Status, Tunnels, About }
 
 @Composable
 private fun MainScreen() {
@@ -142,6 +143,12 @@ private fun MainScreen() {
                         icon = {},
                         label = { Text("Tunnels") },
                     )
+                    NavigationBarItem(
+                        selected = tab == Tab.About,
+                        onClick = { tab = Tab.About },
+                        icon = {},
+                        label = { Text("About") },
+                    )
                 }
             }
         },
@@ -163,6 +170,8 @@ private fun MainScreen() {
                 onDisconnect = { TunnelManager.stop(context) },
                 modifier = Modifier.padding(innerPadding),
             )
+
+            tab == Tab.About -> AboutScreen(modifier = Modifier.padding(innerPadding))
 
             else -> TunnelListScreen(
                 tunnels = store.tunnels,
