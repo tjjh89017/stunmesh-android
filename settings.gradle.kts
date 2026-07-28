@@ -22,9 +22,9 @@ dependencyResolutionManagement {
         // stunmesh-go publishes the Go core as a release asset. A public
         // release download needs no credentials, so CI resolves it with no
         // token, and Gradle caches it like any other dependency.
-        // Asset names carry the tag, as the repo's other release assets do:
-        // "dev.stunmesh:stunmesh:<tag>@aar" maps to
-        // .../releases/download/<tag>/stunmesh-<tag>.aar
+        // Asset names carry the platform and tag, as the repo's other release
+        // assets do: "dev.stunmesh:stunmesh-android:<tag>@aar" maps to
+        // .../releases/download/<tag>/stunmesh-android-<tag>.aar
         ivy("https://github.com/tjjh89017/stunmesh-go/releases/download") {
             patternLayout { artifact("[revision]/[artifact]-[revision].[ext]") }
             metadataSources { artifact() }

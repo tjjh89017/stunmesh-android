@@ -105,10 +105,10 @@ dependencies {
     if (localGoCore.exists()) {
         debugImplementation(files(localGoCore))
     } else if (goCoreVersion != null) {
-        debugImplementation("dev.stunmesh:stunmesh:$goCoreVersion@aar")
+        debugImplementation("dev.stunmesh:stunmesh-android:$goCoreVersion@aar")
     }
     if (goCoreVersion != null) {
-        releaseImplementation("dev.stunmesh:stunmesh:$goCoreVersion@aar")
+        releaseImplementation("dev.stunmesh:stunmesh-android:$goCoreVersion@aar")
     }
 
     implementation(platform(libs.androidx.compose.bom))
