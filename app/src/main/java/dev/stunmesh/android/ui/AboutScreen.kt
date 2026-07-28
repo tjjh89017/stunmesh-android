@@ -8,15 +8,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.stunmesh.android.BuildConfig
 import dev.stunmesh.android.tunnel.TunnelManager
+
+private const val GITHUB_URL = "https://github.com/tjjh89017/stunmesh-android"
 
 @Composable
 fun AboutScreen(modifier: Modifier = Modifier) {
@@ -46,6 +50,35 @@ fun AboutScreen(modifier: Modifier = Modifier) {
                 InfoRow("Build", BuildConfig.BUILD_TYPE)
                 InfoRow("STUNMESH core", TunnelManager.backend.coreVersion)
                 InfoRow("Data plane", TunnelManager.backend::class.java.simpleName)
+            }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("Project", style = MaterialTheme.typography.titleMedium)
+                InfoRow("Author", "Date Huang")
+                val uriHandler = LocalUriHandler.current
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { uriHandler.openUri(GITHUB_URL) },
+                ) {
+                    Text(
+                        text = "GitHub",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = GITHUB_URL,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
         }
 
