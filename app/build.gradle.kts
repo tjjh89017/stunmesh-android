@@ -43,7 +43,7 @@ android {
     sourceSets {
         getByName("main") {
             if (stunmeshAar.exists()) {
-                java.srcDir("src/gobackend/java")
+                kotlin.srcDir("src/gobackend/kotlin")
             }
         }
     }

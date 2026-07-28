@@ -2,6 +2,7 @@ package dev.stunmesh.android.tunnel
 
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import dev.stunmesh.android.backend.BackendEvent
 import dev.stunmesh.android.backend.BackendState
 import dev.stunmesh.android.backend.EventListener
@@ -22,13 +23,24 @@ object TunnelManager {
 
     /**
      * The Go-core backend when the AAR is bundled (GoBackend only exists in
-     * builds that include app/libs/stunmesh.aar), otherwise the stub.
+     * builds that include app/libs/stunmesh.aar), otherwise the stub. A
+     * ClassNotFoundException is the expected stub-build path; anything else
+     * means the Go core is present but unusable, which must be visible
+     * rather than silently degrade to a data plane that moves no packets.
      */
-    val backend: StunmeshBackend = runCatching {
+    val backend: StunmeshBackend = loadBackend()
+
+    private fun loadBackend(): StunmeshBackend = try {
         Class.forName("dev.stunmesh.android.backend.GoBackend")
             .getDeclaredConstructor()
             .newInstance() as StunmeshBackend
-    }.getOrElse { StubBackend() }
+    } catch (e: ClassNotFoundException) {
+        Log.i(TAG, "Go core not bundled, using stub backend")
+        StubBackend()
+    } catch (t: Throwable) {
+        Log.e(TAG, "Go core present but failed to load, using stub backend", t)
+        StubBackend()
+    }
 
     private val _state = MutableStateFlow(BackendState.DOWN)
     val state: StateFlow<BackendState> = _state.asStateFlow()
@@ -68,4 +80,5 @@ object TunnelManager {
         Intent(context, StunmeshVpnService::class.java).setAction(action)
 
     private const val MAX_LOG_LINES = 200
+    private const val TAG = "Stunmesh"
 }
