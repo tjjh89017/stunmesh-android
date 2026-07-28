@@ -26,8 +26,7 @@ interface StunmeshBackend {
 
     /**
      * Hand a fresh tun fd to the running node after Android replaced the
-     * network. The WG device must not
-     * restart.
+     * network. The WG device must not restart.
      */
     fun renewTun(fd: Int)
 

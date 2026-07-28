@@ -14,10 +14,10 @@ import java.util.concurrent.Executors
 
 /**
  * Owns the tun device. The backend pulls the fd through [TunProvider]
- * (`VpnService.Builder.establish()` + `detachFd()`) and protects its outer UDP sockets through [SocketProtector] so no
- * routing loop forms. On a default-network change a fresh tun fd goes to the
- * backend via `renewTun` — the WG device must survive
- * without a restart.
+ * (`VpnService.Builder.establish()` + `detachFd()`) and protects its outer
+ * UDP sockets through [SocketProtector] so no routing loop forms. On a
+ * default-network change a fresh tun fd goes to the backend via `renewTun` —
+ * the WG device must survive without a restart.
  */
 class StunmeshVpnService : VpnService() {
 
