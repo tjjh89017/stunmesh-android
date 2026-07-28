@@ -4,6 +4,7 @@ import android.app.Activity
 import android.net.VpnService
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -134,6 +135,9 @@ private fun MainScreen() {
     }
 
     val editingTunnel = editing
+    // The system back gesture (edge swipe) leaves the editor without saving,
+    // instead of backing out of the app.
+    BackHandler(enabled = editingTunnel != null) { editing = null }
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
