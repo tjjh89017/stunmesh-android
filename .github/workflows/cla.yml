@@ -1,0 +1,21 @@
+name: CLA
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_target:
+    types: [opened, closed, synchronize]
+
+permissions:
+  actions: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  cla-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: CLA check
+        uses: tjjh89017/stunmesh-cla@main
+        with:
+          personal-access-token: ${{ secrets.STUNMESH_CLA_CHECK_TOKEN }}
