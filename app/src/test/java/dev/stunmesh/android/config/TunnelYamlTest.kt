@@ -93,6 +93,28 @@ class TunnelYamlTest {
     }
 
     @Test
+    fun listValuedPluginConfigSurvivesYamlAndJson() {
+        val withList = tunnel.copy(
+            plugins = listOf(
+                PluginDefinition(
+                    instance = "dht",
+                    type = "builtin",
+                    name = "opendht",
+                    config = mapOf(
+                        "endpoints" to listOf("https://a.example", "https://b.example"),
+                        "timeout" to "20s",
+                    ),
+                ),
+            ),
+        )
+        val fromYaml = TunnelYaml.decode(TunnelYaml.encode(withList))
+        assertEquals(withList.plugins, fromYaml.plugins)
+        // The JSON form crosses into the Go core, so it must carry the list too.
+        val fromJson = TunnelConfig.fromJson(withList.toJson())
+        assertEquals(withList.plugins, fromJson.plugins)
+    }
+
+    @Test
     fun missingSchemaMeansCurrent() {
         val decoded = TunnelYaml.decode("wireguard:\n  private_key: PRIV\n")
         assertEquals("PRIV", decoded.iface.privateKey)

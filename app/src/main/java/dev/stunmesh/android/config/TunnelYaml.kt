@@ -137,7 +137,12 @@ object TunnelYaml {
         name = plugin.string("name").ifEmpty { "cloudflare" },
         config = plugin.map("config")
             .entries
-            .associate { (k, v) -> k.toString() to scalar(v) },
+            .associate { (k, v) ->
+                k.toString() to when (v) {
+                    is List<*> -> v.map { scalar(it) }
+                    else -> scalar(v)
+                }
+            },
     )
 
     private fun yaml(): Yaml {
