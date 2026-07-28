@@ -108,9 +108,10 @@ object TunnelYaml {
     }
 
     private fun yaml(): Yaml {
+        // Block style, but without pretty flow: it spreads an empty list over
+        // two lines ("[\n]") instead of writing "[]".
         val options = DumperOptions().apply {
             defaultFlowStyle = DumperOptions.FlowStyle.BLOCK
-            isPrettyFlow = true
             indent = 2
         }
         return Yaml(options)
