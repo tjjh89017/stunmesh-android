@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- Debug builds only: lets tests inject a config over adb, e.g.
+             adb shell am broadcast
+               -n dev.stunmesh.android/.debug.ConfigImportReceiver
+               -e config (base64 of TunnelConfig JSON) -->
+        <receiver
+            android:name="dev.stunmesh.android.debug.ConfigImportReceiver"
+            android:exported="true" />
+    </application>
+
+</manifest>

@@ -48,10 +48,12 @@ fun SettingsScreen(
     var mtu by remember { mutableStateOf(initial.iface.mtu.toString()) }
 
     var ifaceProtocol by remember { mutableStateOf(initial.iface.protocol) }
-    val cloudflare = initial.plugins.firstOrNull() ?: PluginDefinition()
-    var cfZone by remember { mutableStateOf(cloudflare.config["zone"].orEmpty()) }
-    var cfToken by remember { mutableStateOf(cloudflare.config["token"].orEmpty()) }
-    var cfSubdomain by remember { mutableStateOf(cloudflare.config["subdomain"].orEmpty()) }
+    val plugin = initial.plugins.firstOrNull() ?: PluginDefinition()
+    var pluginName by remember { mutableStateOf(plugin.name) }
+    var cfZone by remember { mutableStateOf(plugin.config["zone"].orEmpty()) }
+    var cfToken by remember { mutableStateOf(plugin.config["token"].orEmpty()) }
+    var cfSubdomain by remember { mutableStateOf(plugin.config["subdomain"].orEmpty()) }
+    var dhtEndpoint by remember { mutableStateOf(plugin.config["endpoint"].orEmpty()) }
     var stunServers by remember { mutableStateOf(initial.stunServers.joinToString(", ")) }
     var refreshInterval by remember {
         mutableStateOf(initial.refreshIntervalSeconds.toString())
@@ -116,19 +118,30 @@ fun SettingsScreen(
             FormField(refreshInterval, { refreshInterval = it }, "Refresh interval (seconds)")
         }
 
-        SectionCard(title = "Cloudflare plugin") {
-            FormField(cfZone, { cfZone = it }, "Zone")
-            FormField(cfToken, { cfToken = it }, "API token", secret = true)
-            FormField(cfSubdomain, { cfSubdomain = it }, "Subdomain (optional)")
+        SectionCard(title = "Endpoint exchange plugin") {
+            FormField(pluginName, { pluginName = it }, "Plugin (cloudflare / opendht)")
+            if (pluginName.trim() == "opendht") {
+                FormField(dhtEndpoint, { dhtEndpoint = it }, "DHT proxy endpoint (URL)")
+            } else {
+                FormField(cfZone, { cfZone = it }, "Zone")
+                FormField(cfToken, { cfToken = it }, "API token", secret = true)
+                FormField(cfSubdomain, { cfSubdomain = it }, "Subdomain (optional)")
+            }
         }
 
         Button(
             onClick = {
-                val cfConfig = buildMap {
-                    put("zone", cfZone.trim())
-                    put("token", cfToken.trim())
-                    if (cfSubdomain.isNotBlank()) put("subdomain", cfSubdomain.trim())
+                val chosenPlugin = pluginName.trim().ifEmpty { "cloudflare" }
+                val pluginConfig = if (chosenPlugin == "opendht") {
+                    mapOf("endpoint" to dhtEndpoint.trim())
+                } else {
+                    buildMap {
+                        put("zone", cfZone.trim())
+                        put("token", cfToken.trim())
+                        if (cfSubdomain.isNotBlank()) put("subdomain", cfSubdomain.trim())
+                    }
                 }
+                val instance = "${chosenPlugin}_builtin"
                 onSave(
                     TunnelConfig(
                         name = tunnelName.trim().ifEmpty { "stunmesh" },
@@ -140,13 +153,13 @@ fun SettingsScreen(
                             mtu = mtu.trim().toIntOrNull() ?: 1420,
                             protocol = ifaceProtocol.trim().ifEmpty { "ipv4" },
                         ),
-                        peers = peers.map { it.toPeer(PLUGIN_INSTANCE) },
+                        peers = peers.map { it.toPeer(instance) },
                         plugins = listOf(
                             PluginDefinition(
-                                instance = PLUGIN_INSTANCE,
+                                instance = instance,
                                 type = "builtin",
-                                name = "cloudflare",
-                                config = cfConfig,
+                                name = chosenPlugin,
+                                config = pluginConfig,
                             )
                         ),
                         stunServers = stunServers.splitList(),
@@ -222,5 +235,3 @@ private fun portText(port: Int): String = if (port == 0) "" else port.toString()
 
 private fun String.splitList(): List<String> =
     split(',').map { it.trim() }.filter { it.isNotEmpty() }
-
-private const val PLUGIN_INSTANCE = "cloudflare_builtin"
