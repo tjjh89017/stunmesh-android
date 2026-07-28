@@ -34,9 +34,11 @@ class StunmeshVpnService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
+            // stopSelf(startId) rather than stopSelf(): a start that arrives
+            // while this is queued must not be cancelled by it.
             ACTION_DOWN -> executor.execute {
                 down()
-                stopSelf()
+                stopSelf(startId)
             }
             // ACTION_UP from the UI; null on service restart; SERVICE_INTERFACE
             // when the system starts us for always-on VPN.
@@ -60,7 +62,11 @@ class StunmeshVpnService : VpnService() {
     }
 
     private fun up() {
-        if (TunnelManager.backend.isRunning) return
+        // Android permits one active VPN, so bringing up a tunnel while
+        // another runs replaces it.
+        if (TunnelManager.backend.isRunning) {
+            down()
+        }
         val config = ConfigRepository(this).activeTunnel()
         if (config == null) {
             TunnelManager.appendLog("[error] no tunnel selected")

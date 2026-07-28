@@ -83,9 +83,8 @@ object TunnelManager {
      */
     fun start(context: Context, tunnelId: String) {
         ConfigRepository(context).setActive(tunnelId)
-        if (backend.isRunning) {
-            stop(context)
-        }
+        // The service replaces a running tunnel itself; sending a stop first
+        // would race its stopSelf against this start.
         context.startService(serviceIntent(context, StunmeshVpnService.ACTION_UP))
     }
 
