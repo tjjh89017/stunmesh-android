@@ -18,9 +18,17 @@ class ConfigImportReceiver : BroadcastReceiver() {
         val encoded = intent.getStringExtra("config") ?: return
         runCatching {
             val json = Base64.decode(encoded, Base64.DEFAULT).decodeToString()
-            ConfigRepository(context).save(TunnelConfig.fromJson(json))
+            val tunnel = TunnelConfig.fromJson(json)
+            val repository = ConfigRepository(context)
+            // Replace by name so repeated imports of the same test config
+            // update it instead of piling up duplicates.
+            val store = repository.load()
+            val existing = store.tunnels.firstOrNull { it.name == tunnel.name }
+            val imported = if (existing != null) tunnel.copy(id = existing.id) else tunnel
+            repository.save(store.upsert(imported).copy(activeId = imported.id))
+            imported.name
         }.onSuccess {
-            Log.i(TAG, "config imported")
+            Log.i(TAG, "config imported: $it")
         }.onFailure {
             Log.e(TAG, "config import failed", it)
         }

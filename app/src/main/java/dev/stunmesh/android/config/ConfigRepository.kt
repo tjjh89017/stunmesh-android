@@ -11,28 +11,35 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * Persists the tunnel config as one JSON blob, encrypted at rest with an
+ * Persists all tunnels as one JSON blob, encrypted at rest with an
  * AES-256-GCM key that lives in the Android Keystore (the key material never
- * leaves the secure hardware). The config holds the WG private key and the
- * plugin API token, so it must not sit on disk in plain text.
+ * leaves the secure hardware). The config holds WG private keys and plugin
+ * API tokens, so it must not sit on disk in plain text.
  */
 class ConfigRepository(context: Context) {
 
     private val file = File(context.filesDir, "tunnel_config.bin")
 
-    fun load(): TunnelConfig {
-        if (!file.exists()) return TunnelConfig()
+    fun load(): TunnelStore {
+        if (!file.exists()) return TunnelStore()
         return runCatching {
-            TunnelConfig.fromJson(decrypt(file.readBytes()).decodeToString())
-        }.getOrDefault(TunnelConfig())
+            TunnelStore.fromJson(decrypt(file.readBytes()).decodeToString())
+        }.getOrDefault(TunnelStore())
     }
 
-    fun save(config: TunnelConfig) {
+    fun save(store: TunnelStore) {
         val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeBytes(encrypt(config.toJson().encodeToByteArray()))
+        tmp.writeBytes(encrypt(store.toJson().encodeToByteArray()))
         check(tmp.renameTo(file) || (file.delete() && tmp.renameTo(file))) {
             "config write failed"
         }
+    }
+
+    /** The tunnel the VPN service should bring up, or null if none is set. */
+    fun activeTunnel(): TunnelConfig? = load().active
+
+    fun setActive(id: String) {
+        save(load().copy(activeId = id))
     }
 
     private fun key(): SecretKey {

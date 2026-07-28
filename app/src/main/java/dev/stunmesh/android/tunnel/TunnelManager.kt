@@ -8,6 +8,7 @@ import dev.stunmesh.android.backend.BackendState
 import dev.stunmesh.android.backend.EventListener
 import dev.stunmesh.android.backend.StubBackend
 import dev.stunmesh.android.backend.StunmeshBackend
+import dev.stunmesh.android.config.ConfigRepository
 import dev.stunmesh.android.service.StunmeshVpnService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,6 +49,18 @@ object TunnelManager {
     private val _logLines = MutableStateFlow<List<String>>(emptyList())
     val logLines: StateFlow<List<String>> = _logLines.asStateFlow()
 
+    /** Id of the tunnel the service is running, empty when none. */
+    private val _activeTunnelId = MutableStateFlow("")
+    val activeTunnelId: StateFlow<String> = _activeTunnelId.asStateFlow()
+
+    private val _activeTunnelName = MutableStateFlow("")
+    val activeTunnelName: StateFlow<String> = _activeTunnelName.asStateFlow()
+
+    fun setActiveTunnel(id: String, name: String) {
+        _activeTunnelId.value = id
+        _activeTunnelName.value = name
+    }
+
     val eventListener: EventListener = object : EventListener {
         override fun onStateChanged(state: BackendState) {
             _state.value = state
@@ -63,8 +76,16 @@ object TunnelManager {
         }
     }
 
-    /** Caller must have completed the `VpnService.prepare()` consent flow. */
-    fun start(context: Context) {
+    /**
+     * Brings up [tunnelId], which becomes the stored active tunnel. Caller
+     * must have completed the `VpnService.prepare()` consent flow. Android
+     * permits one active VPN, so a running tunnel is stopped first.
+     */
+    fun start(context: Context, tunnelId: String) {
+        ConfigRepository(context).setActive(tunnelId)
+        if (backend.isRunning) {
+            stop(context)
+        }
         context.startService(serviceIntent(context, StunmeshVpnService.ACTION_UP))
     }
 

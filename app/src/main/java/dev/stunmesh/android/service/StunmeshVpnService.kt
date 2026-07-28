@@ -61,7 +61,13 @@ class StunmeshVpnService : VpnService() {
 
     private fun up() {
         if (TunnelManager.backend.isRunning) return
-        val config = ConfigRepository(this).load()
+        val config = ConfigRepository(this).activeTunnel()
+        if (config == null) {
+            TunnelManager.appendLog("[error] no tunnel selected")
+            stopSelf()
+            return
+        }
+        TunnelManager.setActiveTunnel(config.id, config.name)
         try {
             TunnelManager.backend.start(
                 configJson = config.toJson(),
@@ -131,7 +137,7 @@ class StunmeshVpnService : VpnService() {
         lastNetwork = network
         if (previous == null || previous == network || !TunnelManager.backend.isRunning) return
         TunnelManager.appendLog("[info] default network changed, renewing tun fd")
-        val config = ConfigRepository(this).load()
+        val config = ConfigRepository(this).activeTunnel() ?: return
         val fd = establishTun(config, config.iface.mtu)
         if (fd >= 0) {
             TunnelManager.backend.renewTun(fd)

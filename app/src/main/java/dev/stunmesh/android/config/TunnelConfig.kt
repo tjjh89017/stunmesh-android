@@ -16,7 +16,12 @@ import org.json.JSONObject
  * existing WG interface, but on Android the app owns the whole device.
  */
 data class TunnelConfig(
-    /** Tunnel display name, as in the WireGuard app. */
+    /**
+     * Stable identity, kept across renames so the active-tunnel pointer and
+     * any references survive editing. Generated when the tunnel is created.
+     */
+    val id: String = java.util.UUID.randomUUID().toString(),
+    /** Tunnel display name. */
     val name: String = "stunmesh",
     val iface: InterfaceConfig = InterfaceConfig(),
     val peers: List<PeerConfig> = emptyList(),
@@ -25,8 +30,11 @@ data class TunnelConfig(
     val refreshIntervalSeconds: Int = 600,
     val logLevel: String = "info",
 ) {
-    fun toJson(): String {
+    fun toJson(): String = toJsonObject().toString(2)
+
+    fun toJsonObject(): JSONObject {
         val o = JSONObject()
+        o.put("id", id)
         o.put("name", name)
         o.put("interface", iface.toJson())
         o.put("peers", JSONArray().apply { peers.forEach { put(it.toJson()) } })
@@ -34,15 +42,18 @@ data class TunnelConfig(
         o.put("stun", JSONObject().put("addresses", JSONArray(stunServers)))
         o.put("refresh_interval_seconds", refreshIntervalSeconds)
         o.put("log", JSONObject().put("level", logLevel))
-        return o.toString(2)
+        return o
     }
 
     companion object {
-        fun fromJson(json: String): TunnelConfig {
-            val o = JSONObject(json)
+        fun fromJson(json: String): TunnelConfig = fromJsonObject(JSONObject(json))
+
+        fun fromJsonObject(o: JSONObject): TunnelConfig {
             val peersArray = o.optJSONArray("peers") ?: JSONArray()
             val pluginsArray = o.optJSONArray("plugins") ?: JSONArray()
             return TunnelConfig(
+                // A config written before tunnels had ids gets one now.
+                id = o.optString("id").ifEmpty { java.util.UUID.randomUUID().toString() },
                 name = o.optString("name", "stunmesh"),
                 iface = InterfaceConfig.fromJson(o.optJSONObject("interface") ?: JSONObject()),
                 peers = (0 until peersArray.length()).map {

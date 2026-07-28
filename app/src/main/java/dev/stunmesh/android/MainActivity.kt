@@ -15,6 +15,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -22,9 +23,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import dev.stunmesh.android.config.ConfigRepository
+import dev.stunmesh.android.config.TunnelConfig
 import dev.stunmesh.android.tunnel.TunnelManager
-import dev.stunmesh.android.ui.SettingsScreen
 import dev.stunmesh.android.ui.StatusScreen
+import dev.stunmesh.android.ui.TunnelEditorScreen
+import dev.stunmesh.android.ui.TunnelListScreen
 import dev.stunmesh.android.ui.theme.StunmeshTheme
 
 class MainActivity : ComponentActivity() {
@@ -39,65 +42,101 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Screen { Status, Settings }
+private enum class Tab { Status, Tunnels }
 
 @Composable
 private fun MainScreen() {
     val context = LocalContext.current
-    var screen by remember { mutableStateOf(Screen.Status) }
-    val configRepository = remember { ConfigRepository(context) }
+    val repository = remember { ConfigRepository(context) }
+
+    var tab by remember { mutableStateOf(Tab.Tunnels) }
+    var store by remember { mutableStateOf(repository.load()) }
+    var editing by remember { mutableStateOf<TunnelConfig?>(null) }
+    // The tunnel whose switch was flipped on, held until VPN consent returns.
+    var pendingStartId by remember { mutableStateOf("") }
+
+    val state by TunnelManager.state.collectAsState()
+    val runningId by TunnelManager.activeTunnelId.collectAsState()
 
     val consentLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            TunnelManager.start(context)
+        val id = pendingStartId
+        pendingStartId = ""
+        if (result.resultCode == Activity.RESULT_OK && id.isNotEmpty()) {
+            TunnelManager.start(context, id)
+            tab = Tab.Status
         } else {
             TunnelManager.appendLog("[warn] VPN consent denied")
         }
     }
 
+    // prepare() returns an intent the first time (or after another VPN app
+    // took consent); null means consent is already granted.
+    fun startTunnel(id: String) {
+        val consent = VpnService.prepare(context)
+        if (consent == null) {
+            TunnelManager.start(context, id)
+            tab = Tab.Status
+        } else {
+            pendingStartId = id
+            consentLauncher.launch(consent)
+        }
+    }
+
+    val editingTunnel = editing
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = screen == Screen.Status,
-                    onClick = { screen = Screen.Status },
-                    icon = {},
-                    label = { Text("Status") },
-                )
-                NavigationBarItem(
-                    selected = screen == Screen.Settings,
-                    onClick = { screen = Screen.Settings },
-                    icon = {},
-                    label = { Text("Settings") },
-                )
+            if (editingTunnel == null) {
+                NavigationBar {
+                    NavigationBarItem(
+                        selected = tab == Tab.Status,
+                        onClick = { tab = Tab.Status },
+                        icon = {},
+                        label = { Text("Status") },
+                    )
+                    NavigationBarItem(
+                        selected = tab == Tab.Tunnels,
+                        onClick = { tab = Tab.Tunnels },
+                        icon = {},
+                        label = { Text("Tunnels") },
+                    )
+                }
             }
         },
     ) { innerPadding ->
-        when (screen) {
-            Screen.Status -> StatusScreen(
-                onConnect = {
-                    // prepare() returns an intent on first use (or after
-                    // another VPN app took consent); null means already granted.
-                    val consent = VpnService.prepare(context)
-                    if (consent != null) {
-                        consentLauncher.launch(consent)
-                    } else {
-                        TunnelManager.start(context)
-                    }
+        when {
+            editingTunnel != null -> TunnelEditorScreen(
+                initial = editingTunnel,
+                onSave = { config ->
+                    store = store.upsert(config)
+                    repository.save(store)
+                    editing = null
+                    TunnelManager.appendLog("[info] saved tunnel ${config.name}")
                 },
+                onCancel = { editing = null },
+                modifier = Modifier.padding(innerPadding),
+            )
+
+            tab == Tab.Status -> StatusScreen(
                 onDisconnect = { TunnelManager.stop(context) },
                 modifier = Modifier.padding(innerPadding),
             )
-            Screen.Settings -> SettingsScreen(
-                initial = configRepository.load(),
-                onSave = { config ->
-                    configRepository.save(config)
-                    TunnelManager.appendLog("[info] config saved")
-                    screen = Screen.Status
+
+            else -> TunnelListScreen(
+                tunnels = store.tunnels,
+                runningTunnelId = runningId,
+                state = state,
+                onToggle = { tunnel, on ->
+                    if (on) startTunnel(tunnel.id) else TunnelManager.stop(context)
                 },
+                onEdit = { editing = it },
+                onDelete = { tunnel ->
+                    store = store.remove(tunnel.id)
+                    repository.save(store)
+                },
+                onAdd = { editing = TunnelConfig() },
                 modifier = Modifier.padding(innerPadding),
             )
         }

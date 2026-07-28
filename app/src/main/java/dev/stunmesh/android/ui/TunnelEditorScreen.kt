@@ -35,31 +35,35 @@ import dev.stunmesh.android.config.TunnelConfig
  * have (endpoint-exchange plugin, STUN servers, protocols).
  */
 @Composable
-fun SettingsScreen(
+fun TunnelEditorScreen(
     initial: TunnelConfig,
     onSave: (TunnelConfig) -> Unit,
+    onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var tunnelName by remember { mutableStateOf(initial.name) }
-    var privateKey by remember { mutableStateOf(initial.iface.privateKey) }
-    var addresses by remember { mutableStateOf(initial.iface.addresses.joinToString(", ")) }
-    var listenPort by remember { mutableStateOf(portText(initial.iface.listenPort)) }
-    var dnsServers by remember { mutableStateOf(initial.iface.dnsServers.joinToString(", ")) }
-    var mtu by remember { mutableStateOf(initial.iface.mtu.toString()) }
+    // Keyed on the tunnel id so switching tunnels resets the form instead of
+    // keeping the previously edited tunnel's values.
+    val key = initial.id
+    var tunnelName by remember(key) { mutableStateOf(initial.name) }
+    var privateKey by remember(key) { mutableStateOf(initial.iface.privateKey) }
+    var addresses by remember(key) { mutableStateOf(initial.iface.addresses.joinToString(", ")) }
+    var listenPort by remember(key) { mutableStateOf(portText(initial.iface.listenPort)) }
+    var dnsServers by remember(key) { mutableStateOf(initial.iface.dnsServers.joinToString(", ")) }
+    var mtu by remember(key) { mutableStateOf(initial.iface.mtu.toString()) }
 
-    var ifaceProtocol by remember { mutableStateOf(initial.iface.protocol) }
+    var ifaceProtocol by remember(key) { mutableStateOf(initial.iface.protocol) }
     val plugin = initial.plugins.firstOrNull() ?: PluginDefinition()
-    var pluginName by remember { mutableStateOf(plugin.name) }
-    var cfZone by remember { mutableStateOf(plugin.config["zone"].orEmpty()) }
-    var cfToken by remember { mutableStateOf(plugin.config["token"].orEmpty()) }
-    var cfSubdomain by remember { mutableStateOf(plugin.config["subdomain"].orEmpty()) }
-    var dhtEndpoint by remember { mutableStateOf(plugin.config["endpoint"].orEmpty()) }
-    var stunServers by remember { mutableStateOf(initial.stunServers.joinToString(", ")) }
-    var refreshInterval by remember {
+    var pluginName by remember(key) { mutableStateOf(plugin.name) }
+    var cfZone by remember(key) { mutableStateOf(plugin.config["zone"].orEmpty()) }
+    var cfToken by remember(key) { mutableStateOf(plugin.config["token"].orEmpty()) }
+    var cfSubdomain by remember(key) { mutableStateOf(plugin.config["subdomain"].orEmpty()) }
+    var dhtEndpoint by remember(key) { mutableStateOf(plugin.config["endpoint"].orEmpty()) }
+    var stunServers by remember(key) { mutableStateOf(initial.stunServers.joinToString(", ")) }
+    var refreshInterval by remember(key) {
         mutableStateOf(initial.refreshIntervalSeconds.toString())
     }
 
-    val peers = remember { initial.peers.map { PeerForm(it) }.toMutableStateList() }
+    val peers = remember(key) { initial.peers.map { PeerForm(it) }.toMutableStateList() }
 
     Column(
         modifier = modifier
@@ -144,6 +148,7 @@ fun SettingsScreen(
                 val instance = "${chosenPlugin}_builtin"
                 onSave(
                     TunnelConfig(
+                        id = initial.id,
                         name = tunnelName.trim().ifEmpty { "stunmesh" },
                         iface = InterfaceConfig(
                             privateKey = privateKey.trim(),
@@ -170,6 +175,9 @@ fun SettingsScreen(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Save")
+        }
+        OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+            Text("Cancel")
         }
     }
 }

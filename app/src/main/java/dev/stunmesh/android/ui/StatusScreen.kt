@@ -26,12 +26,12 @@ import dev.stunmesh.android.tunnel.TunnelManager
 
 @Composable
 fun StatusScreen(
-    onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by TunnelManager.state.collectAsState()
     val logLines by TunnelManager.logLines.collectAsState()
+    val activeName by TunnelManager.activeTunnelName.collectAsState()
 
     Column(
         modifier = modifier
@@ -55,20 +55,18 @@ fun StatusScreen(
                     },
                     style = MaterialTheme.typography.headlineSmall,
                 )
+                if (state != BackendState.DOWN && activeName.isNotEmpty()) {
+                    Text(
+                        text = activeName,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
                 Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = onConnect,
-                        enabled = state == BackendState.DOWN,
-                    ) {
-                        Text("Connect")
-                    }
-                    OutlinedButton(
-                        onClick = onDisconnect,
-                        enabled = state == BackendState.UP || state == BackendState.STARTING,
-                    ) {
-                        Text("Disconnect")
-                    }
+                OutlinedButton(
+                    onClick = onDisconnect,
+                    enabled = state == BackendState.UP || state == BackendState.STARTING,
+                ) {
+                    Text("Disconnect")
                 }
             }
         }
