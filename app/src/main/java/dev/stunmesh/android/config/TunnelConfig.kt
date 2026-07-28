@@ -16,6 +16,8 @@ import org.json.JSONObject
  * existing WG interface, but on Android the app owns the whole device.
  */
 data class TunnelConfig(
+    /** Tunnel display name, as in the WireGuard app. */
+    val name: String = "stunmesh",
     val iface: InterfaceConfig = InterfaceConfig(),
     val peers: List<PeerConfig> = emptyList(),
     val plugins: List<PluginDefinition> = emptyList(),
@@ -25,6 +27,7 @@ data class TunnelConfig(
 ) {
     fun toJson(): String {
         val o = JSONObject()
+        o.put("name", name)
         o.put("interface", iface.toJson())
         o.put("peers", JSONArray().apply { peers.forEach { put(it.toJson()) } })
         o.put("plugins", JSONArray().apply { plugins.forEach { put(it.toJson()) } })
@@ -40,6 +43,7 @@ data class TunnelConfig(
             val peersArray = o.optJSONArray("peers") ?: JSONArray()
             val pluginsArray = o.optJSONArray("plugins") ?: JSONArray()
             return TunnelConfig(
+                name = o.optString("name", "stunmesh"),
                 iface = InterfaceConfig.fromJson(o.optJSONObject("interface") ?: JSONObject()),
                 peers = (0 until peersArray.length()).map {
                     PeerConfig.fromJson(peersArray.getJSONObject(it))
@@ -94,8 +98,16 @@ data class PeerConfig(
     val description: String = "",
     /** Base64 WireGuard public key. */
     val publicKey: String = "",
+    /** Base64 WireGuard pre-shared key; empty means none. */
+    val presharedKey: String = "",
     /** Allowed IPs in CIDR form; also installed as tunnel routes. */
     val allowedIps: List<String> = emptyList(),
+    /**
+     * Optional static endpoint "host:port", as in a plain WG config. Usually
+     * empty — STUNMESH discovers and sets endpoints at run time; a static
+     * value only serves as the initial endpoint before discovery.
+     */
+    val endpoint: String = "",
     /** Name of the plugin instance used for endpoint exchange. */
     val plugin: String = "",
     /** Endpoint selection: "ipv4", "ipv6", "prefer_ipv4" or "prefer_ipv6". */
@@ -106,7 +118,9 @@ data class PeerConfig(
         put("name", name)
         put("description", description)
         put("public_key", publicKey)
+        put("preshared_key", presharedKey)
         put("allowed_ips", JSONArray(allowedIps))
+        put("endpoint", endpoint)
         put("plugin", plugin)
         put("protocol", protocol)
         put("persistent_keepalive", persistentKeepalive)
@@ -117,7 +131,9 @@ data class PeerConfig(
             name = o.optString("name"),
             description = o.optString("description"),
             publicKey = o.optString("public_key"),
+            presharedKey = o.optString("preshared_key"),
             allowedIps = o.optJSONArray("allowed_ips").toStringList(),
+            endpoint = o.optString("endpoint"),
             plugin = o.optString("plugin"),
             protocol = o.optString("protocol", "ipv4"),
             persistentKeepalive = o.optInt("persistent_keepalive", 25),
