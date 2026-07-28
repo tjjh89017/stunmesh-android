@@ -164,13 +164,18 @@ data class PluginDefinition(
     val type: String = "builtin",
     /** Built-in plugin name, e.g. "cloudflare". */
     val name: String = "cloudflare",
-    /** Plugin-specific keys. Cloudflare: `zone`, `token`, optional `subdomain`. */
-    val config: Map<String, String> = emptyMap(),
+    /**
+     * Plugin-specific keys. Values are strings or lists of strings, as in
+     * the desktop YAML (opendht's `endpoints` is a list). Cloudflare:
+     * `zone`, `token`, optional `subdomain`.
+     */
+    val config: Map<String, Any> = emptyMap(),
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("instance", instance)
         put("type", type)
         put("name", name)
+        // JSONObject(Map) wraps a List value as a JSON array.
         put("config", JSONObject(config as Map<*, *>))
     }
 
@@ -181,7 +186,12 @@ data class PluginDefinition(
                 instance = o.optString("instance", "cloudflare_builtin"),
                 type = o.optString("type", "builtin"),
                 name = o.optString("name", "cloudflare"),
-                config = configObj.keys().asSequence().associateWith { configObj.getString(it) },
+                config = configObj.keys().asSequence().associateWith { key ->
+                    when (val value = configObj.get(key)) {
+                        is JSONArray -> (0 until value.length()).map { value.getString(it) }
+                        else -> value.toString()
+                    }
+                },
             )
         }
     }

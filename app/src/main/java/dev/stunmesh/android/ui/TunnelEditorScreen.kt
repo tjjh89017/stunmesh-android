@@ -10,7 +10,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -28,6 +33,21 @@ import dev.stunmesh.android.config.InterfaceConfig
 import dev.stunmesh.android.config.PeerConfig
 import dev.stunmesh.android.config.PluginDefinition
 import dev.stunmesh.android.config.TunnelConfig
+
+/** STUN discovery at the interface: which family/families to probe. */
+private val DISCOVERY_PROTOCOLS = listOf("ipv4", "ipv6", "dualstack")
+
+/** Which of a peer's published endpoints to dial. */
+private val PEER_PROTOCOLS = listOf("ipv4", "ipv6", "prefer_ipv4", "prefer_ipv6")
+
+private val PLUGINS = listOf("cloudflare", "opendht")
+
+/**
+ * Prefilled when opendht is picked with no endpoint yet, so a new tunnel
+ * works out of the box; picking a proxy to trust is still the user's call,
+ * so the field stays editable.
+ */
+private const val DEFAULT_DHT_PROXY = "https://dhtproxy2.jami.net"
 
 /**
  * Tunnel editor: an Interface section, one card per peer with the full WG
@@ -52,13 +72,19 @@ fun TunnelEditorScreen(
     var mtu by remember(key) { mutableStateOf(initial.iface.mtu.toString()) }
 
     var ifaceProtocol by remember(key) { mutableStateOf(initial.iface.protocol) }
-    val plugin = initial.plugins.firstOrNull() ?: PluginDefinition()
+    // A new tunnel starts on opendht with the default proxy: it needs no
+    // account or token, so it is the quickest way to a working mesh.
+    val plugin = initial.plugins.firstOrNull() ?: PluginDefinition(
+        instance = "opendht_builtin",
+        name = "opendht",
+        config = mapOf("endpoint" to DEFAULT_DHT_PROXY),
+    )
     var pluginName by remember(key) { mutableStateOf(plugin.name) }
-    var cfZone by remember(key) { mutableStateOf(plugin.config["zone"].orEmpty()) }
-    var cfToken by remember(key) { mutableStateOf(plugin.config["token"].orEmpty()) }
-    var cfSubdomain by remember(key) { mutableStateOf(plugin.config["subdomain"].orEmpty()) }
-    var dhtEndpoint by remember(key) { mutableStateOf(plugin.config["endpoint"].orEmpty()) }
-    var stunServers by remember(key) { mutableStateOf(initial.stunServers.joinToString(", ")) }
+    var cfZone by remember(key) { mutableStateOf(plugin.config.text("zone")) }
+    var cfToken by remember(key) { mutableStateOf(plugin.config.text("token")) }
+    var cfSubdomain by remember(key) { mutableStateOf(plugin.config.text("subdomain")) }
+    var dhtEndpoints by remember(key) { mutableStateOf(plugin.config.lines("endpoints", "endpoint")) }
+    var stunServers by remember(key) { mutableStateOf(initial.stunServers.joinToString("\n")) }
     var refreshInterval by remember(key) {
         mutableStateOf(initial.refreshIntervalSeconds.toString())
     }
@@ -88,22 +114,13 @@ fun TunnelEditorScreen(
                 FormField(peer.presharedKey, { peer.presharedKey = it }, "Pre-shared key (optional)", secret = true)
                 FormField(peer.endpoint, { peer.endpoint = it }, "Endpoint (optional, STUNMESH overrides)")
                 FormField(peer.allowedIps, { peer.allowedIps = it }, "Allowed IPs")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = peer.keepalive,
-                        onValueChange = { peer.keepalive = it },
-                        label = { Text("Persistent keepalive") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = peer.protocol,
-                        onValueChange = { peer.protocol = it },
-                        label = { Text("Protocol") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+                FormField(peer.keepalive, { peer.keepalive = it }, "Persistent keepalive")
+                DropdownField(
+                    value = peer.protocol,
+                    onValueChange = { peer.protocol = it },
+                    label = "Endpoint protocol",
+                    options = PEER_PROTOCOLS,
+                )
                 TextButton(onClick = { peers.removeAt(index) }) {
                     Text("Delete peer")
                 }
@@ -117,15 +134,40 @@ fun TunnelEditorScreen(
         }
 
         SectionCard(title = "STUNMESH") {
-            FormField(ifaceProtocol, { ifaceProtocol = it }, "Discovery protocol (ipv4 / ipv6 / dualstack)")
-            FormField(stunServers, { stunServers = it }, "STUN servers (empty = default)")
+            DropdownField(
+                value = ifaceProtocol,
+                onValueChange = { ifaceProtocol = it },
+                label = "Discovery protocol",
+                options = DISCOVERY_PROTOCOLS,
+            )
+            FormField(
+                stunServers,
+                { stunServers = it },
+                "STUN servers (one per line, empty = default)",
+                multiline = true,
+            )
             FormField(refreshInterval, { refreshInterval = it }, "Refresh interval (seconds)")
         }
 
         SectionCard(title = "Endpoint exchange plugin") {
-            FormField(pluginName, { pluginName = it }, "Plugin (cloudflare / opendht)")
-            if (pluginName.trim() == "opendht") {
-                FormField(dhtEndpoint, { dhtEndpoint = it }, "DHT proxy endpoint (URL)")
+            DropdownField(
+                value = pluginName,
+                onValueChange = {
+                    pluginName = it
+                    if (it == "opendht" && dhtEndpoints.isBlank()) {
+                        dhtEndpoints = DEFAULT_DHT_PROXY
+                    }
+                },
+                label = "Plugin",
+                options = PLUGINS,
+            )
+            if (pluginName == "opendht") {
+                FormField(
+                    dhtEndpoints,
+                    { dhtEndpoints = it },
+                    "DHT proxy endpoints (one per line)",
+                    multiline = true,
+                )
             } else {
                 FormField(cfZone, { cfZone = it }, "Zone")
                 FormField(cfToken, { cfToken = it }, "API token", secret = true)
@@ -135,9 +177,16 @@ fun TunnelEditorScreen(
 
         Button(
             onClick = {
-                val chosenPlugin = pluginName.trim().ifEmpty { "cloudflare" }
-                val pluginConfig = if (chosenPlugin == "opendht") {
-                    mapOf("endpoint" to dhtEndpoint.trim())
+                val chosenPlugin = pluginName.ifEmpty { "opendht" }
+                val pluginConfig: Map<String, Any> = if (chosenPlugin == "opendht") {
+                    val endpoints = dhtEndpoints.splitList()
+                    // A single endpoint stays under the singular key, which
+                    // every released core understands; the list form needs a
+                    // core that accepts list-valued plugin config.
+                    when {
+                        endpoints.size > 1 -> mapOf("endpoints" to endpoints)
+                        else -> mapOf("endpoint" to (endpoints.firstOrNull() ?: ""))
+                    }
                 } else {
                     buildMap {
                         put("zone", cfZone.trim())
@@ -156,7 +205,7 @@ fun TunnelEditorScreen(
                             dnsServers = dnsServers.splitList(),
                             listenPort = listenPort.trim().toIntOrNull() ?: 0,
                             mtu = mtu.trim().toIntOrNull() ?: 1420,
-                            protocol = ifaceProtocol.trim().ifEmpty { "ipv4" },
+                            protocol = ifaceProtocol.ifEmpty { "ipv4" },
                         ),
                         peers = peers.map { it.toPeer(instance) },
                         plugins = listOf(
@@ -192,7 +241,7 @@ private class PeerForm(peer: PeerConfig) {
     var presharedKey by mutableStateOf(peer.presharedKey)
     var endpoint by mutableStateOf(peer.endpoint)
     var allowedIps by mutableStateOf(peer.allowedIps.joinToString(", "))
-    var protocol by mutableStateOf(peer.protocol)
+    var protocol by mutableStateOf(peer.protocol.ifEmpty { "ipv4" })
     var keepalive by mutableStateOf(peer.persistentKeepalive.toString())
 
     fun toPeer(pluginInstance: String): PeerConfig = PeerConfig(
@@ -202,7 +251,7 @@ private class PeerForm(peer: PeerConfig) {
         allowedIps = allowedIps.splitList(),
         endpoint = endpoint.trim(),
         plugin = pluginInstance,
-        protocol = protocol.trim().ifEmpty { "ipv4" },
+        protocol = protocol.ifEmpty { "ipv4" },
         persistentKeepalive = keepalive.trim().toIntOrNull() ?: 25,
     )
 }
@@ -228,18 +277,75 @@ private fun FormField(
     onValueChange: (String) -> Unit,
     label: String,
     secret: Boolean = false,
+    multiline: Boolean = false,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
-        singleLine = true,
+        singleLine = !multiline,
+        minLines = if (multiline) 2 else 1,
         visualTransformation = if (secret) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
         modifier = Modifier.fillMaxWidth(),
     )
 }
 
+/** A read-only field whose value is picked from a fixed set. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DropdownField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    options: List<String>,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        onValueChange(option)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
 private fun portText(port: Int): String = if (port == 0) "" else port.toString()
 
+/** One entry per line or comma, whichever the user typed. */
 private fun String.splitList(): List<String> =
-    split(',').map { it.trim() }.filter { it.isNotEmpty() }
+    split(',', '\n').map { it.trim() }.filter { it.isNotEmpty() }
+
+/** A plugin config value that should be a single string. */
+private fun Map<String, Any>.text(key: String): String = when (val v = this[key]) {
+    null -> ""
+    is List<*> -> v.joinToString("\n")
+    else -> v.toString()
+}
+
+/** A plugin config value edited as one-per-line text, trying [keys] in order. */
+private fun Map<String, Any>.lines(vararg keys: String): String = keys
+    .map { text(it) }
+    .firstOrNull { it.isNotEmpty() }
+    .orEmpty()
