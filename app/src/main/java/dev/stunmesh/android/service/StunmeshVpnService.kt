@@ -128,7 +128,9 @@ class StunmeshVpnService : VpnService() {
         val cm = getSystemService(ConnectivityManager::class.java)
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                executor.execute { onDefaultNetworkChanged(network) }
+                // Callbacks can still be in flight briefly after
+                // unregisterNetworkCallback(); the executor may already be shut down.
+                runCatching { executor.execute { onDefaultNetworkChanged(network) } }
             }
         }
         cm.registerDefaultNetworkCallback(callback)
@@ -169,20 +171,29 @@ class StunmeshVpnService : VpnService() {
         lateinit var callback: ConnectivityManager.NetworkCallback
         callback = object : ConnectivityManager.NetworkCallback() {
             override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
-                executor.execute {
-                    // Tasks queued before down()'s unregister() land after its
-                    // clear(); a stale callback must not repopulate the map.
-                    if (dnsCallback !== callback) return@execute
-                    dnsServersByNetwork[network] = linkProperties.dnsServers.mapNotNull { it.hostAddress }
-                    pushDnsServers()
+                // Same in-flight-after-unregister race as onAvailable above.
+                runCatching {
+                    executor.execute {
+                        // Tasks queued before down()'s unregister() land after its
+                        // clear(); a stale callback must not repopulate the map.
+                        if (dnsCallback !== callback) return@execute
+                        // Link-local resolvers (e.g. RA RDNSS fe80::1) carry a %zone
+                        // in hostAddress that the core can't dial on API 30+.
+                        dnsServersByNetwork[network] = linkProperties.dnsServers
+                            .filterNot { it.isLinkLocalAddress }
+                            .mapNotNull { it.hostAddress }
+                        pushDnsServers()
+                    }
                 }
             }
 
             override fun onLost(network: Network) {
-                executor.execute {
-                    if (dnsCallback !== callback) return@execute
-                    dnsServersByNetwork.remove(network)
-                    pushDnsServers()
+                runCatching {
+                    executor.execute {
+                        if (dnsCallback !== callback) return@execute
+                        dnsServersByNetwork.remove(network)
+                        pushDnsServers()
+                    }
                 }
             }
         }
