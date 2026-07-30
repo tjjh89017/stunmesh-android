@@ -166,9 +166,13 @@ class StunmeshVpnService : VpnService() {
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
             .build()
-        val callback = object : ConnectivityManager.NetworkCallback() {
+        lateinit var callback: ConnectivityManager.NetworkCallback
+        callback = object : ConnectivityManager.NetworkCallback() {
             override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
                 executor.execute {
+                    // Tasks queued before down()'s unregister() land after its
+                    // clear(); a stale callback must not repopulate the map.
+                    if (dnsCallback !== callback) return@execute
                     dnsServersByNetwork[network] = linkProperties.dnsServers.mapNotNull { it.hostAddress }
                     pushDnsServers()
                 }
@@ -176,6 +180,7 @@ class StunmeshVpnService : VpnService() {
 
             override fun onLost(network: Network) {
                 executor.execute {
+                    if (dnsCallback !== callback) return@execute
                     dnsServersByNetwork.remove(network)
                     pushDnsServers()
                 }
