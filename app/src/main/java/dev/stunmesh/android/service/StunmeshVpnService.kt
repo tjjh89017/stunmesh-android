@@ -109,15 +109,27 @@ class StunmeshVpnService : VpnService() {
         val builder = Builder().setSession(SESSION_NAME)
         builder.setMtu(if (config.iface.mtu > 0) config.iface.mtu else fallbackMtu)
         config.iface.addresses.forEach { cidr ->
-            parseCidr(cidr)?.let { (addr, prefix) -> builder.addAddress(addr, prefix) }
+            val parsed = parseCidr(cidr)
+            if (parsed == null) {
+                TunnelManager.appendLog("[warn] address \"$cidr\" is not a valid CIDR, skipped")
+            } else {
+                builder.addAddress(parsed.first, parsed.second)
+            }
         }
         config.iface.dnsServers.forEach { dns ->
-            runCatching { builder.addDnsServer(dns) }
+            runCatching { builder.addDnsServer(dns) }.onFailure {
+                TunnelManager.appendLog("[warn] dns server $dns rejected: ${it.message}")
+            }
         }
         // Allowed IPs double as the routes captured into the tunnel.
         config.peers.flatMap { it.allowedIps }.forEach { cidr ->
-            parseCidr(cidr)?.let { (addr, prefix) ->
-                runCatching { builder.addRoute(addr, prefix) }
+            val parsed = parseCidr(cidr)
+            if (parsed == null) {
+                TunnelManager.appendLog("[warn] allowed ip \"$cidr\" is not a valid CIDR, skipped")
+            } else {
+                runCatching { builder.addRoute(parsed.first, parsed.second) }.onFailure {
+                    TunnelManager.appendLog("[warn] route $cidr rejected: ${it.message}")
+                }
             }
         }
         val pfd = builder.establish() ?: return -1
