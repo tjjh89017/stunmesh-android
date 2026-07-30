@@ -37,12 +37,54 @@ and encrypted peer-endpoint exchange, with no root required.
   exempting the app from battery optimization for reliable long-lived
   tunnels.
 
+## Installing
+
+Grab `stunmesh-android-<tag>.apk` from the
+[latest release](https://github.com/tjjh89017/stunmesh-android/releases) and open
+it on the device; sideloading needs "install unknown apps" allowed for whatever
+opened it (browser or file manager). The APK is universal — one file covers
+arm64-v8a, armeabi-v7a, x86 and x86_64.
+
+Releases are signed with the project's release key, so an installed copy upgrades
+in place. A debug APK from CI is signed with a different key and cannot upgrade a
+release install (or vice versa) — uninstall first to switch.
+
 ## Building
 
 Open in Android Studio, or from the command line:
 
 ```
 ./gradlew assembleDebug
+```
+
+A release build is only installable if it is signed, which needs a keystore
+supplied through the environment (or `-P` properties: `keystoreFile`,
+`keystorePassword`, `keyAlias`, `keyPassword`):
+
+```
+KEYSTORE_FILE=/path/to/release.jks KEYSTORE_PASSWORD=... \
+KEY_ALIAS=... KEY_PASSWORD=... ./gradlew assembleRelease
+```
+
+Without them the build still succeeds but emits
+`stunmesh-android-release-unsigned.apk`, which no device will install. Publishing
+is handled by the `Release` workflow: push a `v*` tag and it builds, signs and
+uploads the APK to a GitHub release (a tag like `v0.1.0-rc1` publishes as a
+prerelease). It needs these repository secrets:
+
+| Secret | What it is |
+| --- | --- |
+| `RELEASE_KEYSTORE_BASE64` | `base64 -w0 release.jks` of the keystore |
+| `RELEASE_KEYSTORE_PASSWORD` | keystore password |
+| `RELEASE_KEY_ALIAS` | key alias inside the keystore |
+| `RELEASE_KEY_PASSWORD` | key password |
+
+Generate the key once and keep it (and its passwords) backed up — losing it means
+no future build can upgrade an existing install:
+
+```
+keytool -genkeypair -keystore release.jks -storetype PKCS12 \
+  -alias stunmesh -keyalg RSA -keysize 4096 -validity 10000
 ```
 
 ## License

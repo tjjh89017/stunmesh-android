@@ -59,6 +59,17 @@ val appVersionCode = (override("versionCode", "VERSION_CODE")
     ?.toIntOrNull()
     ?: 1
 
+// Release signing comes from the environment, never from a file in the repo, so
+// no key material is ever committed and the release pipeline can inject a
+// keystore it decodes from a secret. Without all four, assembleRelease still
+// builds — it just produces the -unsigned APK, which no device will install.
+val signingStoreFile = override("keystoreFile", "KEYSTORE_FILE")
+val signingStorePassword = override("keystorePassword", "KEYSTORE_PASSWORD")
+val signingKeyAlias = override("keyAlias", "KEY_ALIAS")
+val signingKeyPassword = override("keyPassword", "KEY_PASSWORD")
+val hasSigningKey = signingStoreFile != null && signingStorePassword != null &&
+    signingKeyAlias != null && signingKeyPassword != null
+
 android {
     namespace = "dev.stunmesh.android"
     compileSdk {
@@ -77,10 +88,30 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (hasSigningKey) {
+            create("release") {
+                storeFile = file(signingStoreFile!!)
+                storePassword = signingStorePassword
+                keyAlias = signingKeyAlias
+                keyPassword = signingKeyPassword
+                // AGP would default to v2 alone, which installs fine at
+                // minSdk 28 but leaves no way to ever rotate this key: only a
+                // v3 block can carry a signing lineage. Every device at
+                // minSdk 28 verifies v3, and AGP drops the redundant v2 block
+                // once v3 is on, so this is v3-only by design.
+                enableV3Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
             optimization {
                 enable = false
+            }
+            if (hasSigningKey) {
+                signingConfig = signingConfigs.getByName("release")
             }
         }
     }

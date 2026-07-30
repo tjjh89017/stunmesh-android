@@ -40,6 +40,19 @@ needs full history — a shallow checkout silently produces `dev`/`1` unless ove
 from workflow context instead (tag ref → `VERSION_NAME=<tag>`, else `0.0.0-<sha7>`; `VERSION_CODE=$run_number`,
 monotonic like versionCode must be) so it can stay shallow.
 
+### Release signing and publishing
+
+`release` gets a signing config only when all four of `KEYSTORE_FILE`,
+`KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` are present (env, or the matching
+`-PkeystoreFile`-style properties); otherwise `assembleRelease` still succeeds but emits
+`stunmesh-android-release-unsigned.apk`, which no device installs. v3 signing is on so the
+key can carry a lineage later; AGP then drops the redundant v2 block, which minSdk 28
+doesn't need. `.github/workflows/release.yml` runs on `v*` tags: decodes the keystore from
+`RELEASE_KEYSTORE_BASE64` into `$RUNNER_TEMP`, builds, and `gh release create`s the APK as
+`stunmesh-android-<tag>.apk` (prerelease when the tag has a `-suffix`). Unlike CI, a
+release build resolves the pinned Go core AAR, so the published APK carries a real data
+plane.
+
 ### Go core AAR
 
 Set `stunmeshCoreVersion` in `gradle.properties` to a stunmesh-go release tag to pull
