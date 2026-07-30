@@ -123,5 +123,11 @@ No Android Studio here — headless Debian. `local.properties` (`sdk.dir=...`, g
 at the Android SDK; JDK 21 and cmdline-tools/platform-tools/build-tools;36.0.0/platforms;android-36 are
 installed under `~/android-sdk`. For on-device testing, either a real device over `adb` or a local AVD
 (x86_64, KVM-accelerated, run with `emulator -avd <name> -no-window -no-audio`) both work; `adb install`
-+ `adb shell monkey -p dev.stunmesh.android -c android.intent.category.LAUNCHER 1` launches the app
++ `adb shell monkey -p dev.stunmesh.android.debug -c android.intent.category.LAUNCHER 1` launches the app
 without a GUI.
+
+Debug carries `applicationIdSuffix = ".debug"`, so its package is `dev.stunmesh.android.debug` and it
+installs alongside a release build rather than colliding with it — without that, the differing signing
+keys make every switch between the two an uninstall, which destroys the encrypted tunnel config and the
+Keystore key that protects it. Address a debug install as `dev.stunmesh.android.debug` in `adb`
+commands; release stays `dev.stunmesh.android`. Only one of the two can hold the VPN slot at a time.

@@ -1,0 +1,5 @@
+<resources>
+    <!-- Overrides the main label so the two launcher icons are tellable apart
+         now that a debug build installs alongside a release one. -->
+    <string name="app_name">stunmesh debug</string>
+</resources>
