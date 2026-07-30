@@ -45,7 +45,30 @@ data class TunnelConfig(
         return o
     }
 
+    /**
+     * Copy with every secret replaced by [REDACTED], for including the config
+     * in a shareable log export. Empty secrets stay empty so the reader can
+     * still tell whether one was configured. Not meant to be imported back.
+     */
+    fun redactSecrets(): TunnelConfig = copy(
+        iface = iface.copy(privateKey = redact(iface.privateKey)),
+        peers = peers.map { it.copy(presharedKey = redact(it.presharedKey)) },
+        plugins = plugins.map { plugin ->
+            plugin.copy(
+                config = plugin.config.mapValues { (key, value) ->
+                    if (SECRET_KEY.containsMatchIn(key) && value is String) redact(value) else value
+                }
+            )
+        },
+    )
+
     companion object {
+        const val REDACTED = "<redacted>"
+
+        private val SECRET_KEY = Regex("token|secret|password|passphrase", RegexOption.IGNORE_CASE)
+
+        private fun redact(value: String): String = if (value.isEmpty()) "" else REDACTED
+
         fun fromJson(json: String): TunnelConfig = fromJsonObject(JSONObject(json))
 
         fun fromJsonObject(o: JSONObject): TunnelConfig {
