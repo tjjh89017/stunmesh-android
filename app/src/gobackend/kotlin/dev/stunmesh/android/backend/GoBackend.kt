@@ -65,6 +65,10 @@ class GoBackend : StunmeshBackend {
     override fun renewTun(fd: Int) {
         node?.renewTun(fd)
     }
+
+    override fun setDnsServers(servers: String) {
+        node?.setDNSServers(servers)
+    }
 }
 
 private fun String.toBackendState(): BackendState = when (this) {

@@ -62,6 +62,10 @@ class StubBackend : StunmeshBackend {
         tunFd = fd
     }
 
+    override fun setDnsServers(servers: String) {
+        listener?.onLog("info", "setDnsServers($servers)")
+    }
+
     private fun closeTun() {
         val fd = tunFd
         tunFd = -1

@@ -2,7 +2,10 @@ package dev.stunmesh.android.service
 
 import android.content.Intent
 import android.net.ConnectivityManager
+import android.net.LinkProperties
 import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.VpnService
 import dev.stunmesh.android.backend.SocketProtector
 import dev.stunmesh.android.backend.TunProvider
@@ -26,6 +29,7 @@ class StunmeshVpnService : VpnService() {
     private lateinit var executor: ExecutorService
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var lastNetwork: Network? = null
+    private var dnsCallback: ConnectivityManager.NetworkCallback? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -82,6 +86,7 @@ class StunmeshVpnService : VpnService() {
                 eventListener = TunnelManager.eventListener,
             )
             registerNetworkCallback()
+            registerDnsCallback()
         } catch (t: Throwable) {
             TunnelManager.appendLog("[error] tunnel up failed: ${t.message}")
             stopSelf()
@@ -90,6 +95,7 @@ class StunmeshVpnService : VpnService() {
 
     private fun down() {
         unregisterNetworkCallback()
+        unregisterDnsCallback()
         TunnelManager.backend.stop()
     }
 
@@ -136,6 +142,38 @@ class StunmeshVpnService : VpnService() {
         }
         networkCallback = null
         lastNetwork = null
+    }
+
+    /**
+     * Tracks the underlay network's DNS servers (not the tunnel's — plugin
+     * sockets are protected out of the tunnel, so a tunnel-internal resolver
+     * would be unreachable from them). NOT_VPN excludes the VPN itself, which
+     * `registerDefaultNetworkCallback` above would otherwise see as default
+     * once up, feeding the core its own unreachable DNS.
+     */
+    private fun registerDnsCallback() {
+        val cm = getSystemService(ConnectivityManager::class.java)
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            .build()
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
+                val servers = linkProperties.dnsServers.mapNotNull { it.hostAddress }.joinToString(",")
+                TunnelManager.backend.setDnsServers(servers)
+            }
+        }
+        cm.registerNetworkCallback(request, callback)
+        dnsCallback = callback
+    }
+
+    private fun unregisterDnsCallback() {
+        dnsCallback?.let {
+            runCatching {
+                getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it)
+            }
+        }
+        dnsCallback = null
     }
 
     private fun onDefaultNetworkChanged(network: Network) {
