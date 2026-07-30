@@ -30,6 +30,16 @@ interface StunmeshBackend {
      */
     fun renewTun(fd: Int)
 
+    /**
+     * Update the nameservers the core's plugin dialer resolves through
+     * (comma-separated IP literals, optional `:port`, IPv6 with or without
+     * brackets). These are the underlay network's DNS servers, not the
+     * tunnel's — plugin sockets are protected out of the tunnel, so a
+     * tunnel-internal resolver would be unreachable from them. Empty string
+     * reverts the core to its built-in public-resolver fallback.
+     */
+    fun setDnsServers(servers: String)
+
     /** True while the node is running. */
     val isRunning: Boolean
 
