@@ -30,6 +30,7 @@ class StunmeshVpnService : VpnService() {
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var lastNetwork: Network? = null
     private var dnsCallback: ConnectivityManager.NetworkCallback? = null
+    private val dnsServersByNetwork = mutableMapOf<Network, List<String>>()
 
     override fun onCreate() {
         super.onCreate()
@@ -145,11 +146,19 @@ class StunmeshVpnService : VpnService() {
     }
 
     /**
-     * Tracks the underlay network's DNS servers (not the tunnel's — plugin
+     * Tracks the underlay networks' DNS servers (not the tunnel's — plugin
      * sockets are protected out of the tunnel, so a tunnel-internal resolver
      * would be unreachable from them). NOT_VPN excludes the VPN itself, which
      * `registerDefaultNetworkCallback` above would otherwise see as default
      * once up, feeding the core its own unreachable DNS.
+     *
+     * More than one underlay can be up at once (handover windows, "mobile
+     * data always active", dual-SIM), and this request matches all of them —
+     * there is no cheap way to single out the one protected sockets actually
+     * route over. So every change pushes the union of all tracked networks'
+     * servers rather than guessing a "current" one; the core already retries
+     * the next server in the list on a dial failure, so unreachable entries
+     * from a non-default network are harmless.
      */
     private fun registerDnsCallback() {
         val cm = getSystemService(ConnectivityManager::class.java)
@@ -159,12 +168,26 @@ class StunmeshVpnService : VpnService() {
             .build()
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
-                val servers = linkProperties.dnsServers.mapNotNull { it.hostAddress }.joinToString(",")
-                TunnelManager.backend.setDnsServers(servers)
+                executor.execute {
+                    dnsServersByNetwork[network] = linkProperties.dnsServers.mapNotNull { it.hostAddress }
+                    pushDnsServers()
+                }
+            }
+
+            override fun onLost(network: Network) {
+                executor.execute {
+                    dnsServersByNetwork.remove(network)
+                    pushDnsServers()
+                }
             }
         }
         cm.registerNetworkCallback(request, callback)
         dnsCallback = callback
+    }
+
+    private fun pushDnsServers() {
+        val servers = dnsServersByNetwork.values.flatten().distinct().joinToString(",")
+        TunnelManager.backend.setDnsServers(servers)
     }
 
     private fun unregisterDnsCallback() {
@@ -174,6 +197,7 @@ class StunmeshVpnService : VpnService() {
             }
         }
         dnsCallback = null
+        dnsServersByNetwork.clear()
     }
 
     private fun onDefaultNetworkChanged(network: Network) {
