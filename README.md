@@ -57,35 +57,8 @@ Open in Android Studio, or from the command line:
 ./gradlew assembleDebug
 ```
 
-A release build is only installable if it is signed, which needs a keystore
-supplied through the environment (or `-P` properties: `keystoreFile`,
-`keystorePassword`, `keyAlias`, `keyPassword`):
-
-```
-KEYSTORE_FILE=/path/to/release.jks KEYSTORE_PASSWORD=... \
-KEY_ALIAS=... KEY_PASSWORD=... ./gradlew assembleRelease
-```
-
-Without them the build still succeeds but emits
-`stunmesh-android-release-unsigned.apk`, which no device will install. Publishing
-is handled by the `Release` workflow: push a `v*` tag and it builds, signs and
-uploads the APK to a GitHub release (a tag like `v0.1.0-rc1` publishes as a
-prerelease). It needs these repository secrets:
-
-| Secret | What it is |
-| --- | --- |
-| `RELEASE_KEYSTORE_BASE64` | `base64 -w0 release.jks` of the keystore |
-| `RELEASE_KEYSTORE_PASSWORD` | keystore password |
-| `RELEASE_KEY_ALIAS` | key alias inside the keystore |
-| `RELEASE_KEY_PASSWORD` | key password |
-
-Generate the key once and keep it (and its passwords) backed up — losing it means
-no future build can upgrade an existing install:
-
-```
-keytool -genkeypair -keystore release.jks -storetype PKCS12 \
-  -alias stunmesh -keyalg RSA -keysize 4096 -validity 10000
-```
+Published APKs come from the `Release` workflow: pushing a `v*` tag builds,
+signs and uploads one to a GitHub release.
 
 ## License
 
