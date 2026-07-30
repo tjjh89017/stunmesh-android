@@ -106,6 +106,14 @@ android {
     }
 
     buildTypes {
+        debug {
+            // A distinct applicationId so a debug build and an installed
+            // release can coexist: they are signed with different keys, so
+            // sharing one applicationId means every switch between them is an
+            // uninstall, which takes the encrypted tunnel config with it.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
             optimization {
                 enable = false

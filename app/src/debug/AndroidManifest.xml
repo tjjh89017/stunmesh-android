@@ -4,8 +4,11 @@
     <application>
         <!-- Debug builds only: lets tests inject a config over adb, e.g.
              adb shell am broadcast
-               -n dev.stunmesh.android/.debug.ConfigImportReceiver
-               -e config (base64 of TunnelConfig JSON) -->
+               -n dev.stunmesh.android.debug/dev.stunmesh.android.debug.ConfigImportReceiver
+               -e config (base64 of TunnelConfig JSON)
+             Spelled out in full because the applicationId carries the .debug
+             suffix while the class package does too: a relative name here
+             would read as one or the other and mean neither. -->
         <receiver
             android:name="dev.stunmesh.android.debug.ConfigImportReceiver"
             android:exported="true" />
